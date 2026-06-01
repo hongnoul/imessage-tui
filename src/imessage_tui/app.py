@@ -3,12 +3,13 @@
 Layout:
   ConversationsPanel   |   ThreadPanel
                        |   Composer
-  Footer: keybinds + status
+  Footer: keybinds + status indicator
 """
 from __future__ import annotations
 
 import asyncio
 import sys
+import time
 from datetime import datetime, timezone
 from typing import cast
 
@@ -22,7 +23,7 @@ from textual.widgets import (
     Footer, Header, Input, Label, ListItem, ListView, Static, TextArea
 )
 
-from . import bridge
+from . import bridge, outbox
 
 
 # ── Helpers ───────────────────────────────────────────────────────────
@@ -97,6 +98,30 @@ class Bubble(Static):
         if self.msg.direction == "out":
             return f"[b]{body}[/]\n[dim italic right]{meta}[/]"
         return f"{body}\n[dim italic]{meta}[/]"
+
+
+# ── Pending bubble (outbox row not yet sent) ──────────────────────────
+class PendingBubble(Static):
+    def __init__(self, row: outbox.Outgoing) -> None:
+        super().__init__()
+        self.row = row
+        self.add_class("bubble")
+        self.add_class("dir-out")
+        self.add_class(f"pending-{row.status}")
+
+    def render(self) -> str:
+        icon = {
+            "queued":  "⋯",
+            "sending": "↻",
+            "failed":  "⚠",
+        }.get(self.row.status, "•")
+        meta = self.row.status
+        if self.row.status == "queued" and self.row.attempts:
+            meta = f"retry #{self.row.attempts}"
+        elif self.row.status == "failed":
+            err = (self.row.last_error or "")[:60]
+            meta = f"failed — {err}"
+        return f"[dim]{icon}[/] {self.row.body}\n[dim italic]{meta}[/]"
 
 
 # ── Compose modal ─────────────────────────────────────────────────────
@@ -176,6 +201,8 @@ class IMessageTUI(App):
     daemon_healthy: reactive[bool] = reactive(False)
     search_query:   reactive[str]  = reactive("")
     active_peer:    reactive[str]  = reactive("")
+    outbox_pending: reactive[int]  = reactive(0)
+    outbox_failed:  reactive[int]  = reactive(0)
 
     def __init__(self) -> None:
         super().__init__()
@@ -191,6 +218,7 @@ class IMessageTUI(App):
             with Vertical(id="thread-pane"):
                 yield Label("", id="thread-header")
                 yield Vertical(id="thread-body")
+                yield Label("", id="status-bar")
                 yield Input(placeholder="↩ reply (c to compose new)", id="reply-input", disabled=True)
         yield Footer()
 
@@ -199,13 +227,70 @@ class IMessageTUI(App):
         await self._refresh_history()
         self._poll_health()
         self.set_interval(15, self._poll_health)
+        self.set_interval(3, self._refresh_outbox_status)
         self.tail_events()
+        self.outbox_worker()
 
     @work(thread=False)
     async def _poll_health(self) -> None:
         self.daemon_healthy = await bridge.is_healthy()
-        sub = "● daemon healthy" if self.daemon_healthy else "○ daemon unreachable"
-        self.sub_title = f"iPhone messages · {sub}"
+        self._render_status_bar()
+
+    def _refresh_outbox_status(self) -> None:
+        counts = outbox.counts()
+        self.outbox_pending = counts.get("queued", 0) + counts.get("sending", 0)
+        self.outbox_failed = counts.get("failed", 0)
+        self._render_status_bar()
+        # Also re-render the active thread so pending bubbles update.
+        if self.active_peer:
+            self._render_thread()
+
+    def _render_status_bar(self) -> None:
+        try:
+            bar = self.query_one("#status-bar", Label)
+        except Exception:
+            return
+        parts = []
+        if self.daemon_healthy:
+            parts.append("[green]● iPhone connected[/]")
+        else:
+            parts.append("[red]○ iPhone disconnected[/]")
+        if self.outbox_pending:
+            parts.append(f"[yellow]⋯ {self.outbox_pending} pending[/]")
+        if self.outbox_failed:
+            parts.append(f"[red]⚠ {self.outbox_failed} failed[/]")
+        bar.update("  ".join(parts))
+        # Also reflect on the subtitle for the header bar.
+        self.sub_title = "iPhone messages · " + (
+            "connected" if self.daemon_healthy else "disconnected"
+        )
+
+    @work(thread=False)
+    async def outbox_worker(self) -> None:
+        """Drain the outbox: pick the next ready row, try to send, retry on
+        failure with backoff. Runs forever; sleeps when idle."""
+        while True:
+            if not self.daemon_healthy:
+                # Don't bother trying when we know the daemon is down.
+                await asyncio.sleep(2)
+                continue
+            row = await asyncio.to_thread(outbox.claim_one_ready)
+            if row is None:
+                await asyncio.sleep(1)
+                continue
+            ok, detail = await bridge.send_message(row.recipient, row.body)
+            if ok:
+                await asyncio.to_thread(outbox.mark_sent, row.id, detail)
+            else:
+                await asyncio.to_thread(outbox.mark_failure, row.id, detail[:300])
+                if row.attempts + 1 >= outbox.MAX_ATTEMPTS:
+                    self.notify(
+                        f"giving up after {outbox.MAX_ATTEMPTS} tries: {detail[:120]}",
+                        title="send failed",
+                        severity="error",
+                        timeout=8,
+                    )
+            self._refresh_outbox_status()
 
     @work(thread=False)
     async def tail_events(self) -> None:
@@ -251,24 +336,37 @@ class IMessageTUI(App):
             return
 
         conv = next((c for c in self._conversations if c.peer_key == self.active_peer), None)
-        if not conv:
+        pending = outbox.pending_for_peer(self.active_peer)
+        if not conv and not pending:
             header.update("[red]conversation gone[/]")
             return
+        name = conv.display_name if conv else self.active_peer
+        msg_count = len(conv.messages) if conv else 0
         header.update(
-            f"[b]{conv.display_name}[/]   "
-            f"[dim]{conv.peer_key}  ·  {len(conv.messages)} messages[/]"
+            f"[b]{name}[/]   "
+            f"[dim]{self.active_peer}  ·  {msg_count} msgs"
+            + (f"  ·  {len(pending)} pending" if pending else "")
+            + "[/]"
         )
+        # Always allow typing — outbox absorbs disconnects.
         reply.disabled = False
-        reply.placeholder = f"↩ reply to {conv.display_name}"
+        if not self.daemon_healthy:
+            reply.placeholder = f"↩ reply to {name} (offline — will queue)"
+        else:
+            reply.placeholder = f"↩ reply to {name}"
 
-        # Render bubbles oldest-first; the container scrolls to the end.
+        # Render real bubbles oldest-first.
         last_day = None
-        for m in conv.messages:
-            day = m.timestamp[:10]
-            if day != last_day:
-                body.mount(Static(f"\n[dim]── {day} ──[/]\n", classes="day-sep"))
-                last_day = day
-            body.mount(Bubble(m))
+        if conv:
+            for m in conv.messages:
+                day = m.timestamp[:10]
+                if day != last_day:
+                    body.mount(Static(f"\n[dim]── {day} ──[/]\n", classes="day-sep"))
+                    last_day = day
+                body.mount(Bubble(m))
+        # Pending bubbles at the end.
+        for row in pending:
+            body.mount(PendingBubble(row))
         body.scroll_end(animate=False)
 
     # ── Events ────────────────────────────────────────────────────────
@@ -293,7 +391,9 @@ class IMessageTUI(App):
             return
         recipient = self._send_recipient_for_active()
         event.input.value = ""
-        await self._do_send(recipient, body)
+        # Enqueue — worker drains. The thread re-renders on the next tick.
+        await asyncio.to_thread(outbox.enqueue, recipient, body, self.active_peer)
+        self._refresh_outbox_status()
 
     @on(Input.Changed, "#search")
     def on_search_changed(self, event: Input.Changed) -> None:
@@ -312,10 +412,10 @@ class IMessageTUI(App):
         return conv.display_name
 
     async def _do_send(self, recipient: str, body: str) -> None:
-        ok, detail = await bridge.send_message(recipient, body)
-        if not ok:
-            # Errors stay loud — silent send-failures are worse than noisy ones.
-            self.notify(detail[:200], title="send failed", severity="error", timeout=5)
+        """Used by the compose modal. Routes through the outbox like the
+        inline reply does, so disconnects don't lose the message."""
+        await asyncio.to_thread(outbox.enqueue, recipient, body, "")
+        self._refresh_outbox_status()
 
     @work(thread=False)
     async def action_compose(self) -> None:

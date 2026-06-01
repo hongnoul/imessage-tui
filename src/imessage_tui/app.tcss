@@ -78,6 +78,26 @@ Screen {
   background: $success;
 }
 
+#status-bar {
+  height: 1;
+  padding: 0 1;
+  background: $panel;
+  color: $text-muted;
+}
+
+.bubble.pending-queued {
+  background: $primary-darken-2;
+  text-style: italic;
+}
+.bubble.pending-sending {
+  background: $primary-darken-1;
+  text-style: italic;
+}
+.bubble.pending-failed {
+  background: $error 50%;
+  text-style: italic;
+}
+
 #reply-input {
   margin-top: 0;
   border: solid $primary-darken-2;
