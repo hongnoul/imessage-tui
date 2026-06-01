@@ -23,30 +23,50 @@ A terminal UI for reading and sending iMessage/SMS from Linux. Pairs with the [i
 └──────────────────────────────────────────────────────────────┘
 ```
 
-## Quick start
+## Install
 
-Prereqs: Linux, Python 3.11+, the iphonebridge daemon already running. If you don't have iphonebridge set up, follow its [README](https://github.com/gabrielmeir53/iphonebridge) first — get a paired iPhone, enable "Show Message Notifications" in your iPhone's Bluetooth settings for the laptop, and confirm `iphonebridge sms-list` shows your texts.
+Pick whichever style suits you — they all produce a working `imessage-tui` on your PATH.
+
+### one-line install (`curl | bash`)
+
+```bash
+curl -fsSL https://raw.githubusercontent.com/hongnoul/imessage-tui/main/install.sh | bash
+```
+
+The script auto-detects whether you have `pipx` (preferred — clean global install) and falls back to a user-local venv at `~/.local/share/imessage-tui` with a symlink in `~/.local/bin`. Adds zero permanent dependencies; you can uninstall by deleting that directory.
+
+### pipx (most idiomatic for Python CLIs)
+
+```bash
+pipx install git+https://github.com/hongnoul/imessage-tui.git
+```
+
+Same model as `npm install -g` — pipx puts the CLI in its own venv but exposes the binary globally. Install `pipx` first:
+- Arch: `sudo pacman -S python-pipx`
+- Debian/Ubuntu: `sudo apt install pipx`
+- Fedora: `sudo dnf install pipx`
+- macOS: `brew install pipx`
+
+### manual clone (for hacking on it)
 
 ```bash
 git clone https://github.com/hongnoul/imessage-tui.git
 cd imessage-tui
 python -m venv .venv
-.venv/bin/pip install -e .
-
-# Run it
+.venv/bin/pip install -e ".[dev]"
 .venv/bin/imessage-tui
 ```
 
-That's it. Press `?` once it opens for the keybind cheatsheet.
+### Prerequisite: iphonebridge daemon
 
-## Install with pipx (no venv ceremony)
+All three methods require the [iphonebridge](https://github.com/gabrielmeir53/iphonebridge) daemon running on the same machine. Quick check:
 
 ```bash
-pipx install git+https://github.com/hongnoul/imessage-tui.git
-imessage-tui
+systemctl --user status iphonebridge        # should say active (running)
+iphonebridge sms-list | head                # should show your recent texts
 ```
 
-`pipx` lives in your distro's repos (`pacman -S python-pipx`, `apt install pipx`, `brew install pipx`, etc.) — it isolates the install in its own venv but exposes the CLI globally.
+If those don't work, follow iphonebridge's README first — pair iPhone over Bluetooth, enable "Show Message Notifications" in iPhone Bluetooth settings for the laptop, start the daemon.
 
 ## Keybinds
 
