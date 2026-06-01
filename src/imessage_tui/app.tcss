@@ -1,0 +1,107 @@
+/* iMessage TUI — dark, iOS-inspired but terminal-native. */
+
+Screen {
+  background: $background;
+}
+
+#root {
+  height: 1fr;
+}
+
+#sidebar {
+  width: 36;
+  border-right: solid $primary-darken-2;
+  padding: 0 0 0 0;
+}
+
+#search {
+  border: none;
+  background: $boost;
+  margin: 0 1;
+}
+#search.hidden { display: none; }
+
+#conv-list {
+  border: none;
+  height: 1fr;
+}
+#conv-list > ListItem {
+  padding: 0 1;
+  border-bottom: hidden $primary-darken-3;
+}
+#conv-list > ListItem:hover {
+  background: $boost;
+}
+#conv-list > ListItem.--highlight {
+  background: $primary 30%;
+}
+
+#thread-pane {
+  padding: 0 1;
+}
+
+#thread-header {
+  background: $panel;
+  padding: 0 1;
+  height: 1;
+}
+
+#thread-body {
+  height: 1fr;
+  overflow-y: auto;
+  padding: 1;
+}
+
+#thread-body .day-sep {
+  text-align: center;
+  color: $text-muted;
+  margin: 1 0;
+}
+
+.bubble {
+  padding: 0 2;
+  margin: 0 0 1 0;
+  width: auto;
+  max-width: 70;
+}
+.bubble.dir-in {
+  background: $panel;
+  color: $text;
+}
+.bubble.dir-out {
+  background: $primary;
+  color: $text;
+  /* Right-align: occupy auto width but offset from the left. */
+  offset-x: 30;
+}
+.bubble.dir-out.sms {
+  background: $success;
+}
+
+#reply-input {
+  margin-top: 0;
+  border: solid $primary-darken-2;
+}
+#reply-input:focus {
+  border: solid $primary;
+}
+
+/* Modals */
+#compose-modal, #confirm-modal {
+  background: $panel;
+  border: thick $primary;
+  padding: 1 2;
+  margin: 4 8;
+  width: 64;
+  height: auto;
+}
+
+#compose-modal Input,
+#compose-modal TextArea {
+  margin: 1 0;
+}
+
+#compose-status {
+  height: 1;
+  color: $error;
+}

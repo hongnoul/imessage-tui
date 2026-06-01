@@ -1,0 +1,16 @@
+[build-system]
+requires = ["setuptools>=68", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "imessage-tui"
+version = "0.1.0"
+description = "Terminal UI for the iphonebridge daemon. Read/send/hide iPhone messages from the terminal."
+requires-python = ">=3.11"
+dependencies = ["textual>=0.62"]
+
+[project.scripts]
+imessage-tui = "imessage_tui.app:main"
+
+[tool.setuptools.packages.find]
+where = ["src"]
