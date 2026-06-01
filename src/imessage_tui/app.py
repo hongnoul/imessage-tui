@@ -218,7 +218,6 @@ class IMessageTUI(App):
             with Vertical(id="thread-pane"):
                 yield Label("", id="thread-header")
                 yield Vertical(id="thread-body")
-                yield Label("", id="status-bar")
                 yield Input(placeholder="↩ reply (c to compose new)", id="reply-input", disabled=True)
         yield Footer()
 
@@ -246,24 +245,17 @@ class IMessageTUI(App):
             self._render_thread()
 
     def _render_status_bar(self) -> None:
-        try:
-            bar = self.query_one("#status-bar", Label)
-        except Exception:
-            return
+        """Render connection + outbox state into the header subtitle.
+
+        Single source of truth. Was duplicated in a status-bar widget above
+        the reply input; that widget is gone — header carries it all."""
         parts = []
-        if self.daemon_healthy:
-            parts.append("[green]● iPhone connected[/]")
-        else:
-            parts.append("[red]○ iPhone disconnected[/]")
+        parts.append("● connected" if self.daemon_healthy else "○ disconnected")
         if self.outbox_pending:
-            parts.append(f"[yellow]⋯ {self.outbox_pending} pending[/]")
+            parts.append(f"⋯ {self.outbox_pending} pending")
         if self.outbox_failed:
-            parts.append(f"[red]⚠ {self.outbox_failed} failed[/]")
-        bar.update("  ".join(parts))
-        # Also reflect on the subtitle for the header bar.
-        self.sub_title = "iPhone messages · " + (
-            "connected" if self.daemon_healthy else "disconnected"
-        )
+            parts.append(f"⚠ {self.outbox_failed} failed")
+        self.sub_title = " · ".join(parts)
 
     @work(thread=False)
     async def outbox_worker(self) -> None:
