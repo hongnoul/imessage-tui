@@ -289,13 +289,22 @@ class IMessageTUI(App):
         async for msg in bridge.tail_events():
             self._messages.append(msg)
             self._rebuild_conversations()
-            if msg.phone_norm == self.active_peer or msg.phone == self.active_peer:
-                self._render_thread()
-            self.notify(
-                f"{msg.contact_name or msg.phone}: {msg.body[:80]}",
-                title="↘ new message" if msg.direction == "in" else "↗ sent",
-                timeout=3,
+            # Re-render the active thread on any matching event — including
+            # outgoing ones we just sent ourselves (so the bubble appears
+            # without needing ctrl+r).
+            peer_match = (
+                msg.phone_norm == self.active_peer
+                or msg.phone == self.active_peer
             )
+            if peer_match:
+                self._render_thread()
+            # Only notify on incoming. Outgoing was the user's own action.
+            if msg.direction == "in":
+                self.notify(
+                    f"{msg.contact_name or msg.phone}: {msg.body[:80]}",
+                    title="↘ new message",
+                    timeout=3,
+                )
 
     async def _refresh_history(self) -> None:
         # Run in a thread to avoid blocking on a large events.jsonl.
