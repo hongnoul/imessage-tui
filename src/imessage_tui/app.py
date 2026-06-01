@@ -313,9 +313,8 @@ class IMessageTUI(App):
 
     async def _do_send(self, recipient: str, body: str) -> None:
         ok, detail = await bridge.send_message(recipient, body)
-        if ok:
-            self.notify(f"sent → {recipient}", title="↗", timeout=2)
-        else:
+        if not ok:
+            # Errors stay loud — silent send-failures are worse than noisy ones.
             self.notify(detail[:200], title="send failed", severity="error", timeout=5)
 
     @work(thread=False)

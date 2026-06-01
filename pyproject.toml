@@ -5,12 +5,41 @@ build-backend = "setuptools.build_meta"
 [project]
 name = "imessage-tui"
 version = "0.1.0"
-description = "Terminal UI for the iphonebridge daemon. Read/send/hide iPhone messages from the terminal."
+description = "Terminal UI for reading and sending iPhone messages from Linux via iphonebridge"
+readme = "README.md"
+license = { file = "LICENSE" }
 requires-python = ">=3.11"
+authors = [{ name = "hongnoul" }]
+keywords = ["imessage", "iphone", "bluetooth", "tui", "textual", "iphonebridge"]
+classifiers = [
+  "Development Status :: 3 - Alpha",
+  "Environment :: Console :: Curses",
+  "Intended Audience :: End Users/Desktop",
+  "License :: OSI Approved :: MIT License",
+  "Operating System :: POSIX :: Linux",
+  "Programming Language :: Python :: 3 :: Only",
+  "Programming Language :: Python :: 3.11",
+  "Programming Language :: Python :: 3.12",
+  "Programming Language :: Python :: 3.13",
+  "Programming Language :: Python :: 3.14",
+  "Topic :: Communications :: Chat",
+  "Topic :: Terminals",
+]
 dependencies = ["textual>=0.62"]
+
+[project.optional-dependencies]
+dev = ["textual-dev>=1.5", "pytest>=8", "pytest-asyncio>=0.23"]
 
 [project.scripts]
 imessage-tui = "imessage_tui.app:main"
 
+[project.urls]
+Homepage = "https://github.com/hongnoul/imessage-tui"
+Issues = "https://github.com/hongnoul/imessage-tui/issues"
+"iphonebridge (upstream daemon)" = "https://github.com/gabrielmeir53/iphonebridge"
+
 [tool.setuptools.packages.find]
 where = ["src"]
+
+[tool.setuptools.package-data]
+imessage_tui = ["*.tcss"]
